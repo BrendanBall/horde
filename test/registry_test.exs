@@ -2,6 +2,8 @@ defmodule RegistryTest do
   use ExUnit.Case
   doctest Horde.Registry
 
+  require Logger
+
   def processes(registry) when is_atom(registry) do
     :ets.match(:"keys_#{registry}", :"$1") |> Map.new(fn [{k, _m, v}] -> {k, v} end)
   end
@@ -152,6 +154,32 @@ defmodule RegistryTest do
 
       assert [{:other, _}, "name"] = Map.keys(processes(horde1)) |> Enum.sort()
       assert [{:other, _}, "name"] = Map.keys(processes(horde2)) |> Enum.sort()
+    end
+
+    @tag :current
+    test "name conflicts same process" do
+      horde1 = start_registry()
+
+      process = fn horde ->
+        fn ->
+          Process.flag(:trap_exit, true)
+          {:ok, _} = Horde.Registry.register(horde, "name", nil)
+
+          receive do
+            message ->
+              Logger.debug("message from registered process: #{inspect(message)}")
+          end
+        end
+      end
+
+      pid1 = spawn(process.(horde1))
+      pid2 = spawn(process.(horde1))
+
+      Process.sleep(100)
+
+      # One process is still alive anad registered
+      assert ["name"] = Map.keys(processes(horde1))
+      assert Enum.any?([pid1, pid2], &Process.alive?(&1))
     end
 
     test "via callbacks" do
