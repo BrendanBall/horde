@@ -305,18 +305,24 @@ defmodule Horde.RegistryImpl do
   def handle_call({:register, key, value, pid}, _from, state) do
     Process.link(pid)
 
-    DeltaCrdt.put(
-      crdt_name(state.name),
-      {:key, key},
-      {fully_qualified_name(state.name), pid, value},
-      :infinity
-    )
+    case :ets.lookup(state.keys_ets_table, key) do
+      [] ->
+        DeltaCrdt.put(
+          crdt_name(state.name),
+          {:key, key},
+          {fully_qualified_name(state.name), pid, value},
+          :infinity
+        )
 
-    add_key_to_pids_table(state, pid, key)
+        add_key_to_pids_table(state, pid, key)
 
-    :ets.insert(state.keys_ets_table, {key, fully_qualified_name(state.name), {pid, value}})
+        :ets.insert(state.keys_ets_table, {key, fully_qualified_name(state.name), {pid, value}})
 
-    {:reply, {:ok, self()}, state}
+        {:reply, {:ok, self()}, state}
+
+      [{_key, _member, {other_pid, _other_value}}] ->
+        {:reply, {:error, {:already_registered, other_pid}}, state}
+    end
   end
 
   def handle_call({:update_value, key, pid, value}, _from, state) do

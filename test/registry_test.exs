@@ -158,27 +158,29 @@ defmodule RegistryTest do
 
     @tag :current
     test "name conflicts same process" do
-      horde1 = start_registry()
+      horde = start_registry()
 
-      process = fn horde ->
-        fn ->
-          Process.flag(:trap_exit, true)
+
+      pid1 =  spawn(fn ->
           {:ok, _} = Horde.Registry.register(horde, "name", nil)
-
           receive do
             message ->
-              Logger.debug("message from registered process: #{inspect(message)}")
+              Logger.debug("message from registered process: #{message}")
           end
-        end
-      end
 
-      pid1 = spawn(process.(horde1))
-      pid2 = spawn(process.(horde1))
+        end)
+      pid2 =  spawn(fn ->
+          {:error, {:already_registered, _}} = Horde.Registry.register(horde, "name", nil)
+          receive do
+            message ->
+              Logger.debug("message from registered process: #{message}")
+          end
+        end)
 
       Process.sleep(100)
 
       # One process is still alive anad registered
-      assert ["name"] = Map.keys(processes(horde1))
+      assert ["name"] = Map.keys(processes(horde))
       assert Enum.any?([pid1, pid2], &Process.alive?(&1))
     end
 
